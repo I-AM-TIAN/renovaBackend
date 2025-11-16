@@ -1,4 +1,5 @@
-import { BeforeInsert, BeforeUpdate, Column, Entity, PrimaryGeneratedColumn } from 'typeorm';
+import { BeforeInsert, BeforeUpdate, Column, Entity, OneToMany, PrimaryGeneratedColumn } from 'typeorm';
+import { UserImage } from './user-image.entity';
 
 @Entity('users')
 export class User {
@@ -26,6 +27,23 @@ export class User {
         nullable: true,
     })
     telefono?: string;
+
+    @OneToMany(
+        () => UserImage,
+        (userImage) => userImage.user,
+        { cascade: true, eager: true }
+    )
+    images?: UserImage[];
+
+    @Column('int', {
+        default: 0,
+    })
+    ecopoints: number;
+
+    @Column('text', {
+        nullable: true,
+    })
+    ecoStatus?: string;
 
     @Column('bool', {
         default: true,

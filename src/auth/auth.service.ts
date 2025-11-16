@@ -10,9 +10,10 @@ import { Repository } from 'typeorm';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 
-import { User } from './entities';
+import { User, UserImage } from './entities';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
+import { UpdateProfileDto } from './dto/update-profile.dto';
 
 @Injectable()
 export class AuthService {
@@ -21,6 +22,10 @@ export class AuthService {
   constructor(
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
+
+    @InjectRepository(UserImage)
+    private readonly userImageRepository: Repository<UserImage>,
+
     private readonly jwtService: JwtService,
   ) {}
 
@@ -57,14 +62,7 @@ export class AuthService {
       const token = this.getJwtToken({ id: user.id });
 
       return {
-        user: {
-          id: user.id,
-          nombres: user.nombres,
-          apellidos: user.apellidos,
-          email: user.email,
-          telefono: user.telefono,
-          roles: user.roles,
-        },
+        user: this.getUserResponse(user),
         token,
       };
     } catch (error) {
@@ -79,7 +77,19 @@ export class AuthService {
       // Buscar usuario con password
       const user = await this.userRepository.findOne({
         where: { email },
-        select: { id: true, email: true, password: true, nombres: true, apellidos: true, telefono: true, roles: true, isActive: true },
+        select: { 
+          id: true, 
+          email: true, 
+          password: true, 
+          nombres: true, 
+          apellidos: true, 
+          telefono: true, 
+          roles: true, 
+          isActive: true,
+          ecopoints: true,
+          ecoStatus: true,
+        },
+        relations: { images: true },
       });
 
       if (!user) {
@@ -101,14 +111,7 @@ export class AuthService {
       const token = this.getJwtToken({ id: user.id });
 
       return {
-        user: {
-          id: user.id,
-          nombres: user.nombres,
-          apellidos: user.apellidos,
-          email: user.email,
-          telefono: user.telefono,
-          roles: user.roles,
-        },
+        user: this.getUserResponse(user),
         token,
       };
     } catch (error) {
@@ -121,18 +124,87 @@ export class AuthService {
     return token;
   }
 
+  private getUserResponse(user: User) {
+    const profileImage = user.images?.find(img => img.isProfileImage)?.url || null;
+    const images = user.images?.map(img => img.url) || [];
+
+    return {
+      id: user.id,
+      nombres: user.nombres,
+      apellidos: user.apellidos,
+      email: user.email,
+      telefono: user.telefono,
+      roles: user.roles,
+      profileImage,
+      images,
+      ecopoints: user.ecopoints,
+      ecoStatus: user.ecoStatus,
+    };
+  }
+
   async checkAuthStatus(user: User) {
     return {
-      user: {
-        id: user.id,
-        nombres: user.nombres,
-        apellidos: user.apellidos,
-        email: user.email,
-        telefono: user.telefono,
-        roles: user.roles,
-      },
+      user: this.getUserResponse(user),
       token: this.getJwtToken({ id: user.id }),
     };
+  }
+
+  async updateProfile(userId: string, updateProfileDto: UpdateProfileDto) {
+    try {
+      const user = await this.userRepository.findOneBy({ id: userId });
+
+      if (!user) {
+        throw new BadRequestException('Usuario no encontrado');
+      }
+
+      // Actualizar campos
+      Object.assign(user, updateProfileDto);
+
+      await this.userRepository.save(user);
+
+      return {
+        user: this.getUserResponse(user),
+      };
+    } catch (error) {
+      this.handleDBExceptions(error);
+    }
+  }
+
+  async updateProfileImage(userId: string, imageUrl: string) {
+    try {
+      const user = await this.userRepository.findOne({
+        where: { id: userId },
+        relations: { images: true },
+      });
+
+      if (!user) {
+        throw new BadRequestException('Usuario no encontrado');
+      }
+
+      // Marcar todas las imágenes actuales como no-perfil
+      if (user.images) {
+        user.images.forEach(img => img.isProfileImage = false);
+      }
+
+      // Crear nueva imagen de perfil
+      const newImage = this.userImageRepository.create({
+        url: imageUrl,
+        isProfileImage: true,
+      });
+
+      if (!user.images) {
+        user.images = [];
+      }
+
+      user.images.push(newImage);
+      await this.userRepository.save(user);
+
+      return {
+        user: this.getUserResponse(user),
+      };
+    } catch (error) {
+      this.handleDBExceptions(error);
+    }
   }
 
   private handleDBExceptions(error: any): never {

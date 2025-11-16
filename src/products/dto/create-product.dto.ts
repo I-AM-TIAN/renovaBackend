@@ -1,4 +1,4 @@
-import { IsArray, IsNumber, IsOptional, IsPositive, IsString, MinLength } from "class-validator";
+import { IsArray, IsNumber, IsOptional, IsPositive, IsString, IsUUID, MinLength } from "class-validator";
 
 export class CreateProductDto {
 
@@ -28,4 +28,10 @@ export class CreateProductDto {
     @IsOptional()
     @IsArray()
     images?: string[];
+
+    @IsUUID()
+    locationId: string;
+
+    @IsUUID()
+    modalityId: string;
 }

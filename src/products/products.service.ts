@@ -11,7 +11,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 import { PaginationDto } from 'src/common/dtos/pagination.dto';
 import { validate as isUUID } from 'uuid';
-import { Product, ProductImage } from './entities';
+import { Product, ProductImage, Location, Modality } from './entities';
 
 @Injectable()
 export class ProductsService {
@@ -24,16 +24,35 @@ export class ProductsService {
     @InjectRepository(ProductImage)
     private readonly productImageRepository: Repository<ProductImage>,
 
+    @InjectRepository(Location)
+    private readonly locationRepository: Repository<Location>,
+
+    @InjectRepository(Modality)
+    private readonly modalityRepository: Repository<Modality>,
+
     private readonly dataSource: DataSource,
   ) {}
 
   async create(createProductDto: CreateProductDto) {
     try {
 
-      const { images = [], ...productDetails} = createProductDto;
+      const { images = [], locationId, modalityId, ...productDetails} = createProductDto;
+
+      // Verificar que existan la ubicación y modalidad
+      const location = await this.locationRepository.findOneBy({ id: locationId });
+      if (!location) {
+        throw new NotFoundException(`Location with id "${locationId}" not found`);
+      }
+
+      const modality = await this.modalityRepository.findOneBy({ id: modalityId });
+      if (!modality) {
+        throw new NotFoundException(`Modality with id "${modalityId}" not found`);
+      }
 
       const product = this.productRepository.create({
         ...productDetails,
+        location,
+        modality,
         images: images.map( image => this.productImageRepository.create({ url: image }) ),
       });
       await this.productRepository.save(product);
@@ -52,6 +71,8 @@ export class ProductsService {
       skip: offset,
       relations: {
         images: true,
+        location: true,
+        modality: true,
       }
     })
 
@@ -95,7 +116,7 @@ export class ProductsService {
 
   async update(id: string, updateProductDto: UpdateProductDto) {
 
-    const { images, ...toUpdate } = updateProductDto;
+    const { images, locationId, modalityId, ...toUpdate } = updateProductDto;
 
     const product = await this.productRepository.preload({ id: id, ...toUpdate });
 
@@ -108,6 +129,24 @@ export class ProductsService {
     await queryRunner.startTransaction();
 
     try {
+      // Actualizar ubicación si se proporciona
+      if (locationId) {
+        const location = await this.locationRepository.findOneBy({ id: locationId });
+        if (!location) {
+          throw new NotFoundException(`Location with id "${locationId}" not found`);
+        }
+        product.location = location;
+      }
+
+      // Actualizar modalidad si se proporciona
+      if (modalityId) {
+        const modality = await this.modalityRepository.findOneBy({ id: modalityId });
+        if (!modality) {
+          throw new NotFoundException(`Modality with id "${modalityId}" not found`);
+        }
+        product.modality = modality;
+      }
+
       if (images) {
         await queryRunner.manager.delete(ProductImage, { product: { id } });
         product.images = images.map( image => 
@@ -153,5 +192,51 @@ export class ProductsService {
     } catch (error) {
       this.handleDBExceptions(error);
     }
+  }
+
+  // Métodos para Location
+  async createLocation(createLocationDto: any) {
+    try {
+      const location = this.locationRepository.create(createLocationDto);
+      await this.locationRepository.save(location);
+      return location;
+    } catch (error) {
+      this.handleDBExceptions(error);
+    }
+  }
+
+  async findAllLocations() {
+    return await this.locationRepository.find();
+  }
+
+  async findLocationById(id: string) {
+    const location = await this.locationRepository.findOneBy({ id });
+    if (!location) {
+      throw new NotFoundException(`Location with id "${id}" not found`);
+    }
+    return location;
+  }
+
+  // Métodos para Modality
+  async createModality(createModalityDto: any) {
+    try {
+      const modality = this.modalityRepository.create(createModalityDto);
+      await this.modalityRepository.save(modality);
+      return modality;
+    } catch (error) {
+      this.handleDBExceptions(error);
+    }
+  }
+
+  async findAllModalities() {
+    return await this.modalityRepository.find();
+  }
+
+  async findModalityById(id: string) {
+    const modality = await this.modalityRepository.findOneBy({ id });
+    if (!modality) {
+      throw new NotFoundException(`Modality with id "${id}" not found`);
+    }
+    return modality;
   }
 }

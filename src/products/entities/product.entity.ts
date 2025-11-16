@@ -1,7 +1,9 @@
-import { BeforeInsert, BeforeUpdate, Column, Entity, OneToMany, PrimaryGeneratedColumn } from 'typeorm';
-import { ProductImage } from './';
+import { BeforeInsert, BeforeUpdate, Column, Entity, ManyToOne, OneToMany, PrimaryGeneratedColumn } from 'typeorm';
+import { ProductImage } from './product-image.entity';
+import { Location } from './location.entity';
+import { Modality } from './modality.entity';
 
-@Entity()
+@Entity('products')
 export class Product {
 
     @PrimaryGeneratedColumn('uuid')
@@ -30,6 +32,20 @@ export class Product {
         default: [],
     })
     tags: string[];
+
+    @ManyToOne(
+        () => Location,
+        (location) => location.products,
+        { eager: true }
+    )
+    location: Location;
+
+    @ManyToOne(
+        () => Modality,
+        (modality) => modality.products,
+        { eager: true }
+    )
+    modality: Modality;
 
     @OneToMany(
         () => ProductImage,
