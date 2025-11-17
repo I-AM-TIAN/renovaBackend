@@ -25,6 +25,18 @@ export class User {
 
     @Column('text', {
         nullable: true,
+        select: false,
+    })
+    resetPasswordToken?: string;
+
+    @Column('timestamp', {
+        nullable: true,
+        select: false,
+    })
+    resetPasswordExpires?: Date;
+
+    @Column('text', {
+        nullable: true,
     })
     telefono?: string;
 

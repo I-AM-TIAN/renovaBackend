@@ -9,11 +9,14 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
+import * as crypto from 'crypto';
 
 import { User, UserImage } from './entities';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
 
 @Injectable()
 export class AuthService {
@@ -201,6 +204,123 @@ export class AuthService {
 
       return {
         user: this.getUserResponse(user),
+      };
+    } catch (error) {
+      this.handleDBExceptions(error);
+    }
+  }
+
+  async forgotPassword(forgotPasswordDto: ForgotPasswordDto) {
+    try {
+      const { email } = forgotPasswordDto;
+
+      // Buscar usuario por email
+      const user = await this.userRepository.findOne({
+        where: { email },
+        select: {
+          id: true,
+          email: true,
+          nombres: true,
+          apellidos: true,
+          resetPasswordToken: true,
+          resetPasswordExpires: true,
+        },
+      });
+
+      // Por seguridad, siempre devolvemos el mismo mensaje aunque el usuario no exista
+      if (!user) {
+        return {
+          message: 'Si el correo electrónico está registrado, recibirás un enlace para restablecer tu contraseña',
+        };
+      }
+
+      // Generar token único
+      const resetToken = crypto.randomBytes(32).toString('hex');
+      
+      // Hash del token para almacenarlo de forma segura
+      const hashedToken = await bcrypt.hash(resetToken, 10);
+      
+      // El token expira en 1 hora
+      const expiresAt = new Date();
+      expiresAt.setHours(expiresAt.getHours() + 1);
+
+      // Guardar token y fecha de expiración
+      user.resetPasswordToken = hashedToken;
+      user.resetPasswordExpires = expiresAt;
+      
+      await this.userRepository.save(user);
+
+      // TODO: Aquí deberías enviar un email con el token
+      // Por ahora, devolvemos el token en la respuesta (SOLO PARA DESARROLLO)
+      this.logger.warn(`Token de recuperación para ${email}: ${resetToken}`);
+      this.logger.warn(`Token expira en: ${expiresAt}`);
+
+      return {
+        message: 'Si el correo electrónico está registrado, recibirás un enlace para restablecer tu contraseña',
+        // IMPORTANTE: En producción, NO devolver el token en la respuesta
+        // Solo enviarlo por email. Esto es solo para desarrollo/pruebas
+        token: resetToken, // Eliminar en producción
+      };
+    } catch (error) {
+      this.handleDBExceptions(error);
+    }
+  }
+
+  async resetPassword(resetPasswordDto: ResetPasswordDto) {
+    try {
+      const { token, newPassword, confirmPassword } = resetPasswordDto;
+
+      // Validar que las contraseñas coincidan
+      if (newPassword !== confirmPassword) {
+        throw new BadRequestException('Las contraseñas no coinciden');
+      }
+
+      // Buscar usuario con token válido
+      const users = await this.userRepository.find({
+        select: {
+          id: true,
+          email: true,
+          nombres: true,
+          apellidos: true,
+          resetPasswordToken: true,
+          resetPasswordExpires: true,
+        },
+      });
+
+      let userToReset: User | null = null;
+
+      // Verificar el token contra todos los usuarios
+      for (const user of users) {
+        if (user.resetPasswordToken && user.resetPasswordExpires) {
+          const isTokenValid = await bcrypt.compare(token, user.resetPasswordToken);
+          
+          if (isTokenValid) {
+            // Verificar si el token no ha expirado
+            if (new Date() > user.resetPasswordExpires) {
+              throw new BadRequestException('El token de recuperación ha expirado. Solicita uno nuevo');
+            }
+            userToReset = user;
+            break;
+          }
+        }
+      }
+
+      if (!userToReset) {
+        throw new BadRequestException('Token de recuperación inválido o expirado');
+      }
+
+      // Encriptar nueva contraseña
+      const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+      // Actualizar contraseña y limpiar tokens
+      userToReset.password = hashedPassword;
+      userToReset.resetPasswordToken = undefined;
+      userToReset.resetPasswordExpires = undefined;
+
+      await this.userRepository.save(userToReset);
+
+      return {
+        message: 'Contraseña actualizada exitosamente. Ya puedes iniciar sesión con tu nueva contraseña',
       };
     } catch (error) {
       this.handleDBExceptions(error);
