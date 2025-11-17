@@ -2,6 +2,7 @@ import { BeforeInsert, BeforeUpdate, Column, Entity, ManyToOne, OneToMany, Prima
 import { ProductImage } from './product-image.entity';
 import { Location } from './location.entity';
 import { Modality } from './modality.entity';
+import { User } from '../../auth/entities';
 
 @Entity('products')
 export class Product {
@@ -46,6 +47,13 @@ export class Product {
         { eager: true }
     )
     modality: Modality;
+
+    @ManyToOne(
+        () => User,
+        (user) => user.id,
+        { eager: true }
+    )
+    user: User;
 
     @OneToMany(
         () => ProductImage,

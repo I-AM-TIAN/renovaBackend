@@ -1,18 +1,25 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, ParseUUIDPipe, Query } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, ParseUUIDPipe, Query, UseGuards } from '@nestjs/common';
 import { ProductsService } from './products.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { PaginationDto } from './../common/dtos/pagination.dto';
 import { CreateLocationDto } from './dto/create-location.dto';
 import { CreateModalityDto } from './dto/create-modality.dto';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { GetUser } from '../auth/decorators';
+import { User } from '../auth/entities';
 
 @Controller('products')
 export class ProductsController {
   constructor(private readonly productsService: ProductsService) {}
 
   @Post()
-  create(@Body() createProductDto: CreateProductDto) {
-    return this.productsService.create(createProductDto);
+  @UseGuards(JwtAuthGuard)
+  create(
+    @Body() createProductDto: CreateProductDto,
+    @GetUser() user: User,
+  ) {
+    return this.productsService.create(createProductDto, user);
   }
 
   @Get()

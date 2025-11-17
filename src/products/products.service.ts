@@ -12,6 +12,7 @@ import { DataSource, Repository } from 'typeorm';
 import { PaginationDto } from 'src/common/dtos/pagination.dto';
 import { validate as isUUID } from 'uuid';
 import { Product, ProductImage, Location, Modality } from './entities';
+import { User } from '../auth/entities';
 
 @Injectable()
 export class ProductsService {
@@ -33,34 +34,85 @@ export class ProductsService {
     private readonly dataSource: DataSource,
   ) {}
 
-  async create(createProductDto: CreateProductDto) {
+  async create(createProductDto: CreateProductDto, user: User) {
     try {
 
-      const { images = [], locationId, modalityId, ...productDetails} = createProductDto;
+      const { images = [], location: locationString, modality: modalityString, ...productDetails} = createProductDto;
 
-      // Verificar que existan la ubicación y modalidad
-      const location = await this.locationRepository.findOneBy({ id: locationId });
-      if (!location) {
-        throw new NotFoundException(`Location with id "${locationId}" not found`);
-      }
+      // Parsear y crear/buscar ubicación
+      const location = await this.parseAndCreateLocation(locationString);
 
-      const modality = await this.modalityRepository.findOneBy({ id: modalityId });
+      // Buscar modalidad por nombre
+      const modality = await this.modalityRepository.findOne({
+        where: { name: modalityString }
+      });
+
       if (!modality) {
-        throw new NotFoundException(`Modality with id "${modalityId}" not found`);
+        throw new NotFoundException(`Modalidad "${modalityString}" no encontrada. Use: Venta, Intercambio o Donación`);
       }
 
       const product = this.productRepository.create({
         ...productDetails,
         location,
         modality,
+        user,
         images: images.map( image => this.productImageRepository.create({ url: image }) ),
       });
       await this.productRepository.save(product);
 
-      return {...product, images};
+      // Recargar el producto con todas las relaciones
+      const savedProduct = await this.productRepository.findOne({
+        where: { id: product.id },
+        relations: {
+          images: true,
+          location: true,
+          modality: true,
+          user: true,
+        }
+      });
+
+      if (!savedProduct) {
+        throw new InternalServerErrorException('Error al guardar el producto');
+      }
+
+      // Mapear imágenes correctamente para la respuesta
+      return {
+        ...savedProduct,
+        images: savedProduct.images?.map(img => img.url) || []
+      };
     } catch (error) {
       this.handleDBExceptions(error);
     }
+  }
+
+  private async parseAndCreateLocation(locationString: string): Promise<Location> {
+    // Parsear string: "Bogotá, Cundinamarca, Colombia" o solo "Bogotá"
+    const parts = locationString.split(',').map(part => part.trim());
+    
+    const city = parts[0];
+    const state = parts[1] || undefined;
+    const country = parts[2] || undefined;
+
+    // Buscar si ya existe
+    const whereCondition: any = { city };
+    if (state) whereCondition.state = state;
+    if (country) whereCondition.country = country;
+
+    let location = await this.locationRepository.findOne({
+      where: whereCondition
+    });
+
+    // Si no existe, crear nueva
+    if (!location) {
+      location = this.locationRepository.create({
+        city,
+        state,
+        country
+      });
+      await this.locationRepository.save(location);
+    }
+
+    return location;
   }
 
   async findAll(paginationDto: PaginationDto) {
@@ -73,6 +125,7 @@ export class ProductsService {
         images: true,
         location: true,
         modality: true,
+        user: true,
       }
     })
 
@@ -116,7 +169,7 @@ export class ProductsService {
 
   async update(id: string, updateProductDto: UpdateProductDto) {
 
-    const { images, locationId, modalityId, ...toUpdate } = updateProductDto;
+    const { images, location: locationString, modality: modalityString, ...toUpdate } = updateProductDto;
 
     const product = await this.productRepository.preload({ id: id, ...toUpdate });
 
@@ -130,19 +183,18 @@ export class ProductsService {
 
     try {
       // Actualizar ubicación si se proporciona
-      if (locationId) {
-        const location = await this.locationRepository.findOneBy({ id: locationId });
-        if (!location) {
-          throw new NotFoundException(`Location with id "${locationId}" not found`);
-        }
+      if (locationString) {
+        const location = await this.parseAndCreateLocation(locationString);
         product.location = location;
       }
 
       // Actualizar modalidad si se proporciona
-      if (modalityId) {
-        const modality = await this.modalityRepository.findOneBy({ id: modalityId });
+      if (modalityString) {
+        const modality = await this.modalityRepository.findOne({
+          where: { name: modalityString }
+        });
         if (!modality) {
-          throw new NotFoundException(`Modality with id "${modalityId}" not found`);
+          throw new NotFoundException(`Modalidad "${modalityString}" no encontrada. Use: Venta, Intercambio o Donación`);
         }
         product.modality = modality;
       }
