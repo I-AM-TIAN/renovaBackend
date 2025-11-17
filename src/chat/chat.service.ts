@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Conversation, Message } from './entities';
 import { SendMessageDto } from './dto/send-message.dto';
+import { Product } from '../products/entities';
 
 @Injectable()
 export class ChatService {
@@ -12,12 +13,37 @@ export class ChatService {
 
     @InjectRepository(Message)
     private readonly messageRepository: Repository<Message>,
+
+    @InjectRepository(Product)
+    private readonly productRepository: Repository<Product>,
   ) {}
 
   // Obtener o crear conversación entre dos usuarios
   async getOrCreateConversation(user1Id: string, user2Id: string, productId?: string) {
     if (user1Id === user2Id) {
       throw new BadRequestException('No puedes crear una conversación contigo mismo');
+    }
+
+    // Si hay un producto, validar su estado
+    if (productId) {
+      const product = await this.productRepository.findOne({
+        where: { id: productId },
+        relations: { user: true }
+      });
+
+      if (!product) {
+        throw new NotFoundException(`Producto con id "${productId}" no encontrado`);
+      }
+
+      // Validar que el producto no esté reservado (a menos que sea el dueño)
+      if (product.status === 'reservado' && product.user.id !== user1Id && product.user.id !== user2Id) {
+        throw new BadRequestException('Este producto está reservado. No se puede iniciar una conversación.');
+      }
+
+      // Validar que el producto esté disponible o reservado (no "no_disponible")
+      if (product.status === 'no_disponible') {
+        throw new BadRequestException('Este producto no está disponible.');
+      }
     }
 
     // Buscar conversación existente (sin importar el orden de usuarios)

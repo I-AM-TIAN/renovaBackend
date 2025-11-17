@@ -34,6 +34,11 @@ export class Product {
     })
     tags: string[];
 
+    @Column('text', {
+        default: 'disponible',
+    })
+    status: 'disponible' | 'reservado' | 'no_disponible';
+
     @ManyToOne(
         () => Location,
         (location) => location.products,

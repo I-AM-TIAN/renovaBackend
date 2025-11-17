@@ -2,6 +2,7 @@ import { Controller, Get, Post, Body, Patch, Param, Delete, ParseUUIDPipe, Query
 import { ProductsService } from './products.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
+import { UpdateProductStatusDto } from './dto/update-product-status.dto';
 import { PaginationDto } from './../common/dtos/pagination.dto';
 import { CreateLocationDto } from './dto/create-location.dto';
 import { CreateModalityDto } from './dto/create-modality.dto';
@@ -27,6 +28,16 @@ export class ProductsController {
     return this.productsService.findAll( paginationDto );
   }
 
+  // Obtener productos del usuario autenticado
+  @Get('my-products')
+  @UseGuards(JwtAuthGuard)
+  findUserProducts(
+    @GetUser() user: User,
+    @Query() paginationDto: PaginationDto
+  ) {
+    return this.productsService.findUserProducts(user.id, paginationDto);
+  }
+
   @Get(':term')
   findOne(@Param( 'term' ) term: string) {
     return this.productsService.findOnePlain(term);
@@ -35,6 +46,17 @@ export class ProductsController {
   @Patch(':id')
   update(@Param('id', ParseUUIDPipe) id: string, @Body() updateProductDto: UpdateProductDto) {
     return this.productsService.update( id, updateProductDto);
+  }
+
+  // Actualizar estado del producto
+  @Patch(':id/status')
+  @UseGuards(JwtAuthGuard)
+  updateStatus(
+    @Param('id', ParseUUIDPipe) id: string,
+    @GetUser() user: User,
+    @Body() updateStatusDto: UpdateProductStatusDto
+  ) {
+    return this.productsService.updateStatus(id, user.id, updateStatusDto.status);
   }
 
   @Delete(':id')

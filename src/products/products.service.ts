@@ -118,7 +118,12 @@ export class ProductsService {
   async findAll(paginationDto: PaginationDto) {
     const { limit = 10, offset = 0 } = paginationDto;
 
+    // Solo mostrar productos disponibles y reservados (no los "no_disponible")
     const products = await this.productRepository.find({
+      where: [
+        { status: 'disponible' },
+        { status: 'reservado' }
+      ],
       take: limit,
       skip: offset,
       relations: {
@@ -133,6 +138,56 @@ export class ProductsService {
       ...product,
       images: product.images?.map( img => img.url ) ?? []
     }))
+  }
+
+  // Obtener productos del usuario autenticado (todos los estados)
+  async findUserProducts(userId: string, paginationDto: PaginationDto) {
+    const { limit = 10, offset = 0 } = paginationDto;
+
+    const products = await this.productRepository.find({
+      where: { user: { id: userId } },
+      take: limit,
+      skip: offset,
+      order: { slug: 'DESC' }, // Ordenar por fecha de creación
+      relations: {
+        images: true,
+        location: true,
+        modality: true,
+        user: true,
+      }
+    });
+
+    return products.map( (product) => ({
+      ...product,
+      images: product.images?.map( img => img.url ) ?? []
+    }));
+  }
+
+  // Actualizar estado del producto
+  async updateStatus(productId: string, userId: string, status: 'disponible' | 'reservado' | 'no_disponible') {
+    const product = await this.productRepository.findOne({
+      where: { id: productId },
+      relations: { user: true }
+    });
+
+    if (!product) {
+      throw new NotFoundException(`Producto con id "${productId}" no encontrado`);
+    }
+
+    // Verificar que el usuario sea el dueño del producto
+    if (product.user.id !== userId) {
+      throw new BadRequestException('No tienes permiso para modificar este producto');
+    }
+
+    product.status = status;
+    await this.productRepository.save(product);
+
+    return {
+      id: product.id,
+      name: product.name,
+      status: product.status,
+      message: `Estado actualizado a: ${status}`
+    };
   }
 
   async findOne(term: string) {

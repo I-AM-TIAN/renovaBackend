@@ -5,10 +5,11 @@ import { ChatGateway } from './chat.gateway';
 import { ChatController } from './chat.controller';
 import { Conversation, Message } from './entities';
 import { AuthModule } from '../auth/auth.module';
+import { Product } from '../products/entities';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Conversation, Message]),
+    TypeOrmModule.forFeature([Conversation, Message, Product]),
     AuthModule,
   ],
   controllers: [ChatController],
