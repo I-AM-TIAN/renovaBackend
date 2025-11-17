@@ -5,6 +5,8 @@ import { ProductsModule } from './products/products.module';
 import { CommonModule } from './common/common.module';
 import { AuthModule } from './auth/auth.module';
 import { SeedModule } from './seed/seed.module';
+import { ChatModule } from './chat/chat.module';
+import { FilesModule } from './files/files.module';
 
 @Module({
   imports: [
@@ -28,6 +30,10 @@ import { SeedModule } from './seed/seed.module';
     AuthModule,
 
     SeedModule,
+
+    ChatModule,
+
+    FilesModule,
   ],
 })
 
